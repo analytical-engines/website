@@ -4,7 +4,7 @@ import starlight from '@astrojs/starlight';
 // https://astro.build/config
 export default defineConfig({
     site: 'https://analytical-engines.com',
-    base: '/ja',
+    base: '/',
 	integrations: [
 		starlight({
             defaultLocale: 'ja',
