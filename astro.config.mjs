@@ -1,45 +1,19 @@
-import { defineConfig } from 'astro/config';
-import starlight from '@astrojs/starlight';
+import { defineConfig } from "astro/config";
+import sitemap from "@astrojs/sitemap";
+import mdx from "@astrojs/mdx";
+import pagefind from "astro-pagefind";
+import tailwindcss from "@tailwindcss/vite";
 
 // https://astro.build/config
 export default defineConfig({
-    site: 'https://analytical-engines.com',
-    base: '/',
-	integrations: [
-		starlight({
-            defaultLocale: 'ja',
-			title: {
-                ja: '解析機関',
-                en: 'Analytical Engines',
-            },
-            locales: {
-                ja: {
-                    label: '日本語',
-                    lang: 'ja',
-                    //title: '解析機関',
-                },
-                en: {
-                    label: 'English',
-                    lang: 'en',
-                    //title: 'Analytical Engines',
-                },
-            },
-			social: {
-				github: 'https://github.com/analytical-engines',
-			},
-			sidebar: [
-				{
-					label: 'Guides',
-					items: [
-						// Each item here is one entry in the navigation menu.
-						{ label: 'Example Guide', link: '/guides/example/' },
-					],
-				},
-				{
-					label: 'Reference',
-					autogenerate: { directory: 'reference' },
-				},
-			],
-		}),
-	],
+  site: "https://astro-micro.vercel.app",
+  integrations: [sitemap(), mdx(), pagefind()],
+  vite: {
+    plugins: [tailwindcss()],
+  },
+  markdown: {
+    shikiConfig: {
+      theme: "css-variables",
+    },
+  },
 });
