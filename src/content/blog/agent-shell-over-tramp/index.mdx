@@ -184,8 +184,19 @@ Method not found: initialize
 ```
 
 But `initialize` is the request agent-shell itself sends. Its own message was
-coming back to it. The ACP traffic log showed the outgoing `initialize`, and
-0.7 seconds later the same `initialize` arriving.
+coming back to it. This is what `agent-shell-view-traffic` showed:
+
+```
+19:58:56.140 → request      initialize
+19:58:56.802 ← request      initialize
+19:58:56.802 → response     error
+19:58:56.844 ← response     error
+19:58:57.124 ← unknown      result
+```
+
+The outgoing `initialize` came back 0.7 seconds later as an incoming request.
+agent-shell answered it with an error, and that error came back too. A `result`
+only showed up after that, and agent-shell listed it as `unknown`.
 
 The process list showed the command TRAMP had run:
 
