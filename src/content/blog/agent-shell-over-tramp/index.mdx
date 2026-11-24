@@ -1,0 +1,370 @@
+---
+title: "Running Claude Code on a remote host from agent-shell over TRAMP"
+description: "What it took to start claude-agent-acp on a remote machine from agent-shell, and where it got stuck along the way."
+date: "2026-11-24"
+tags:
+  - emacs
+  - agent-shell
+  - tramp
+---
+
+import { Tweet } from "@astro-community/astro-embed-twitter";
+
+I wanted to use Claude Code on my VPS from the Emacs on my Mac, through
+[agent-shell](https://github.com/xenodium/agent-shell). Open a remote directory
+with TRAMP, start agent-shell there, and have the agent work on the remote
+files. agent-shell already starts the agent through TRAMP when
+`default-directory` is remote, so it sounded like it should just work. It took
+a bit more than that.
+
+My setup:
+
+- Local: macOS, Emacs 31.1 (Tramp 2.8.2), agent-shell 0.95.1
+- Remote: Linux over ssh, zsh, Node installed with [mise](https://mise.jdx.dev)
+- Agent: Claude Code through claude-agent-acp 0.110.0
+
+## How the pieces talk
+
+agent-shell does not talk to Claude directly. It speaks ACP (Agent Client
+Protocol), and an adapter, claude-agent-acp, translates between ACP and Claude
+Code. agent-shell starts the adapter as a child process and exchanges JSON-RPC
+messages with it, one per line, over its stdin and stdout. The first message is
+`initialize`; once that is answered, the session starts.
+
+```
+Emacs (agent-shell) <-> claude-agent-acp <-> Claude
+```
+
+With TRAMP, the adapter runs on the remote host instead, and the messages go
+through ssh:
+
+```
+Emacs (Mac) <-> ssh <-> claude-agent-acp (remote) <-> Claude
+```
+
+Most of what went wrong below was about one thing: getting those JSON lines
+through ssh cleanly.
+
+## Install the adapter on the remote host
+
+```sh
+npm install -g @agentclientprotocol/claude-agent-acp
+```
+
+Note: type the full scoped name. The adapter used to be published as
+`@zed-industries/claude-code-acp`, and an unrelated package named plain
+`claude-code-acp` also exists on npm. agent-shell looks for the
+`claude-agent-acp` command.
+
+## Let TRAMP find it
+
+This step matters if Node and the adapter live under your home directory on the
+remote host, as they do with version managers such as mise, nvm or asdf. If
+Node comes from the system's packages (`/usr/bin/node` and the like), TRAMP
+finds everything as it is and you can skip ahead.
+
+In my case, the first attempt ended with:
+
+```
+Executable "claude-agent-acp" not found on nekonya.
+```
+
+TRAMP does run a shell on the remote host, but it does not use the PATH that
+your shell configuration sets up. It sets PATH from `tramp-remote-path`, which
+by default lists standard places such as `/bin` and `/usr/bin`. Anything
+installed under your home directory, such as Node from mise, is not on it.
+
+Adding `tramp-own-remote-path` makes TRAMP include the PATH of your login shell.
+That may still miss tools activated in `.zshrc`, so I also added mise's Node
+directory itself:
+
+```elisp
+(with-eval-after-load 'tramp
+  (add-to-list 'tramp-remote-path 'tramp-own-remote-path)
+  (add-to-list 'tramp-remote-path
+               "/home/me/.local/share/mise/installs/node/latest/bin"))
+```
+
+Both `claude-agent-acp` and `node` need to be found: the adapter is a
+JavaScript file that starts with `#!/usr/bin/env node`. mise's directory has
+both.
+
+## Stuck at "Loading..."
+
+Now the adapter started on the remote host, agent-shell sent `initialize`, and
+nothing came back. The buffer said `Loading...` and stayed that way.
+
+By default, TRAMP starts a remote process through the shell it keeps open on
+the remote host for everything else: the process was in fact `/bin/sh -i`, an
+interactive shell on a pty. Whatever that shell prints shares the channel with
+the adapter's output. In the ACP log I found the remote login banner
+(`Last login: ...`), errors from my `.zshrc`, and the marker strings TRAMP uses
+to talk to its shell, all where agent-shell expected one JSON message per line.
+I did not track down which of these broke the exchange, but the conversation
+never got past `initialize`.
+
+TRAMP can also start the process directly, as `ssh host command`, with the
+remote output going straight to Emacs over a pipe. This is called a direct
+async process, and it is what fixed this step.
+
+It is not enabled with `setq`, though. Tramp ignores the global value of
+`tramp-direct-async-process`; the comment in `tramp.el` says so:
+
+```elisp
+;; It has been indicated.  We don't use the global value of
+;; `tramp-direct-async-process'.
+```
+
+It has to be set as a connection-local variable:
+
+```elisp
+(with-eval-after-load 'tramp
+  (connection-local-set-profile-variables
+   'remote-direct-async-process
+   '((tramp-direct-async-process . t)))
+  (connection-local-set-profiles
+   '(:application tramp :protocol "ssh")
+   'remote-direct-async-process))
+```
+
+This is also what was suggested in
+[agent-shell#872](https://github.com/xenodium/agent-shell/issues/872), where
+cursor-agent hung at `Loading...` behind an ssh server whose banner could not
+be turned off.
+
+## The process exits right away
+
+With direct async on, the adapter no longer hung. It exited at once, and the
+log said only that the process had finished. No error message at all.
+
+My ssh key has a passphrase. On its regular connection, TRAMP watches ssh's
+prompts and asks for the passphrase in the minibuffer, so everything else had
+been working fine. A direct async process is a new `ssh` that Emacs starts on
+its own, and nobody is there to answer the prompt. It cannot log in, and it
+quietly exits.
+
+So direct async needs ssh to log in without asking anything. You can check
+that with:
+
+```sh
+ssh -o BatchMode=yes myhost true && echo ok
+```
+
+If this fails, put the key in an ssh-agent. On macOS, Apple's `ssh-add` can
+store the passphrase in the Keychain and add the key to the system's agent:
+
+```sh
+/usr/bin/ssh-add --apple-use-keychain ~/.ssh/id_ed25519
+```
+
+A few things I ran into on macOS:
+
+- An OpenSSH from Homebrew uses the same system agent, so this works with it
+  too.
+- Homebrew's OpenSSH stops with "Bad configuration option" on `UseKeychain yes`
+  in `~/.ssh/config`. If you want that line, put `IgnoreUnknown UseKeychain`
+  before it.
+- The agent is empty again after a reboot. `/usr/bin/ssh-add
+  --apple-load-keychain` loads the keys back from the Keychain.
+
+## Your own `initialize` comes back
+
+With ssh logging in, agent-shell got further and then showed:
+
+```
+Unhandled incoming request: "initialize"
+Method not found: initialize
+```
+
+But `initialize` is the request agent-shell itself sends. Its own message was
+coming back to it. The ACP traffic log showed the outgoing `initialize`, and
+0.7 seconds later the same `initialize` arriving.
+
+The process list showed the command TRAMP had run:
+
+```
+ssh -q -e none myhost -t -t "cd /path/to/project/ && ( env ... claude-agent-acp )"
+```
+
+`-t -t` makes ssh allocate a pty on the remote side, and a terminal echoes back
+what it receives, so that you can see what you type. Here it echoed every JSON
+message agent-shell wrote. Tramp's `ssh` method adds `-t -t` to direct async
+processes; it is in the method's definition in `tramp-sh.el`:
+
+```elisp
+(tramp-direct-async         ("-t" "-t"))
+```
+
+Setting that parameter to `t` keeps direct async on for the method but adds no
+arguments:
+
+```elisp
+(with-eval-after-load 'tramp-sh
+  (setf (alist-get 'tramp-direct-async
+                   (cdr (assoc "ssh" tramp-methods)))
+        '(t)))
+```
+
+There is a trade-off. Without a terminal, the remote process does not get a
+hangup when the connection goes away, so a `claude-agent-acp` may be left
+running on the remote host after you close agent-shell. `pgrep -fa
+claude-agent-acp` on the remote host shows them. This also changes the `ssh`
+method for every direct async process, not only agent-shell's.
+
+## Two names for the same directory
+
+`initialize` was answered now. The next step, starting a session, failed with:
+
+```
+Invalid params: cwd does not exist on the machine running the agent: /ssh:myhost:/path/to/project
+```
+
+To Emacs, the project is `/ssh:myhost:/path/to/project`. To the adapter,
+running on that host, it is just `/path/to/project`; it knows nothing about
+TRAMP file names. agent-shell sent the working directory the way Emacs names
+it.
+
+The same mismatch exists the other way. agent-shell lets the agent read and
+write files through Emacs (so that the agent sees unsaved edits in buffers),
+and those requests come with the remote host's own paths, which Emacs can only
+open with the TRAMP prefix put back.
+
+agent-shell has a hook for exactly this, `agent-shell-path-resolver-function`,
+there for running agents in containers. It is applied in both directions, so
+one function that strips the TRAMP prefix from remote file names and adds it
+to plain ones is enough:
+
+```elisp
+(defun my/agent-shell-tramp-resolve-path (path)
+  (cond ((file-remote-p path) (file-local-name path))
+        ((file-remote-p default-directory)
+         (concat (file-remote-p default-directory) path))
+        (t path)))
+
+(setq agent-shell-path-resolver-function #'my/agent-shell-tramp-resolve-path)
+```
+
+Local sessions are untouched: there, neither the path nor `default-directory`
+is remote. (As I found out later, there is a package that does this for you;
+more on that at the end.)
+
+## It works, but slowly
+
+Finally I could talk to Claude on the remote host. Replies crawled in a few
+words at a time, though, and the echo area kept showing:
+
+```
+Tramp: Decoding remote file '/ssh:myhost:/path/to/project/.agent-shell/transcripts/2026-11-23-20-13-01.md' ...
+```
+
+agent-shell saves a transcript of each session as Markdown, under
+`.agent-shell/transcripts/` in the project. With a remote project, that file
+was on the remote host too, and agent-shell appends to it as each chunk of a
+reply arrives. Every few words meant another file operation over TRAMP.
+
+Turning transcripts off (`(setq agent-shell-transcript-file-path-function nil)`)
+made replies as fast as in a local session. To keep transcripts, I store the
+ones of remote sessions on the local machine instead, one directory per host
+and remote project:
+
+```elisp
+(defun my/agent-shell-transcript-file-path ()
+  (if-let* ((host (file-remote-p default-directory 'host)))
+      (expand-file-name
+       (format-time-string "%F-%H-%M-%S.md")
+       (file-name-concat
+        "~/.local/share/agent-shell/remote-transcripts" host
+        (replace-regexp-in-string
+         "/" "-" (directory-file-name (file-local-name (agent-shell-cwd))))))
+    (agent-shell--default-transcript-file-path)))
+
+(setq agent-shell-transcript-file-path-function
+      #'my/agent-shell-transcript-file-path)
+```
+
+The fallback for local sessions calls agent-shell's own default, which is an
+internal function; if it is renamed in a later version, this needs a fix.
+
+## And then I found agent-shell-tramp
+
+With everything working, I went looking at agent-shell's issues, and found
+that [junyi-hou/agent-shell-tramp](https://github.com/junyi-hou/agent-shell-tramp)
+already exists. It is the TRAMP integration that agent-shell's issues point
+to, and it does the last two steps above for you: it translates paths both
+ways and keeps the transcripts of remote sessions on the local machine. It
+does that more carefully than my function, too: its transcript directories
+tell apart the method, the user and the host, and add a hash of the full
+remote path, while mine would mix up, say, `/ssh:myhost:` and
+`/docker:myhost:`.
+
+The earlier steps are a different matter. agent-shell-tramp (0.2.0) leaves
+starting the process to acp.el and TRAMP, so the rest is up to your TRAMP and
+ssh setup:
+
+| Step                                         | agent-shell-tramp | Yourself |
+|----------------------------------------------|:-----------------:|:--------:|
+| Install `@agentclientprotocol/claude-agent-acp` on the remote host |   | ✓ |
+| Let TRAMP find it and `node` (`tramp-remote-path`) |             | ✓ |
+| Direct async, as a connection-local variable |                   | ✓ |
+| ssh login without a prompt (ssh-agent)       |                   | ✓ |
+| No `-t -t` for the `ssh` method's direct async |                 | ✓ |
+| Translate paths between Emacs and the agent  | ✓                 |          |
+| Keep transcripts of remote sessions locally  | ✓                 |          |
+
+(xenodium, too, [thought I had been using it all along](https://x.com/xenodium/status/2125079814604476772).)
+
+<Tweet id="https://x.com/xenodium/status/2125079814604476772" />
+
+So I did it the hard way, but the hard part, it turns out, was mostly on the
+TRAMP side anyway. Afterwards I switched to agent-shell-tramp, kept the TRAMP
+settings, and checked that the combination works: sessions start, paths are
+translated, and transcripts land under `~/.agent-shell/transcripts/`.
+
+## The TRAMP side, in one place
+
+If you want to try it, this is what I would do on top of
+`(agent-shell-tramp-mode 1)`.
+
+Once, on the remote host:
+
+```sh
+npm install -g @agentclientprotocol/claude-agent-acp
+```
+
+And check, from the local machine, that ssh logs in without asking anything
+(if not, put the key in an ssh-agent):
+
+```sh
+ssh -o BatchMode=yes myhost true && echo ok
+```
+
+In Emacs:
+
+```elisp
+(with-eval-after-load 'tramp
+  ;; Only if Node lives under your home directory on the remote host;
+  ;; adjust the path to yours.
+  (add-to-list 'tramp-remote-path 'tramp-own-remote-path)
+  (add-to-list 'tramp-remote-path
+               "/home/me/.local/share/mise/installs/node/latest/bin")
+  ;; Start remote processes directly over ssh.  `setq' does not work.
+  (connection-local-set-profile-variables
+   'remote-direct-async-process
+   '((tramp-direct-async-process . t)))
+  (connection-local-set-profiles
+   '(:application tramp :protocol "ssh")
+   'remote-direct-async-process))
+
+(with-eval-after-load 'tramp-sh
+  ;; No "-t -t", so that the pty does not echo the JSON back.
+  (setf (alist-get 'tramp-direct-async
+                   (cdr (assoc "ssh" tramp-methods)))
+        '(t)))
+```
+
+## Thanks
+
+Thanks to [Alvaro Ramirez (xenodium)](https://xenodium.com) for agent-shell,
+and for [suggesting](https://x.com/xenodium/status/2125079536496959547) that I write this up.
+
+<Tweet id="https://x.com/xenodium/status/2125079536496959547" />
