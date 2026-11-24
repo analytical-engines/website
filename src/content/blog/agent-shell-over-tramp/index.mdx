@@ -45,6 +45,13 @@ Emacs (Mac) <-> ssh <-> claude-agent-acp (remote) <-> Claude
 Most of what went wrong below was about one thing: getting those JSON lines
 through ssh cleanly.
 
+You can watch those messages. Turn on logging, with
+`(setq acp-logging-enabled t)` or `M-x agent-shell-toggle-logging`; then, in
+the agent-shell buffer, `M-x agent-shell-view-traffic` lists the messages going
+each way, and `M-x agent-shell-view-acp-logs` shows the raw log, including
+whatever the adapter writes to stderr. Most of what I found below, I found
+there.
+
 ## Install the adapter on the remote host
 
 ```sh
