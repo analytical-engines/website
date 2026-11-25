@@ -76,13 +76,13 @@ const projects: CollectionEntry<"projects">[] = (
           </h2>
           <article>
             <p>
-              If you want to get in touch with me about something or just to say
-              hi, reach out on social media or send me an email.
+              Packages are on GitHub, and I am on X. To follow new posts, use the
+              RSS feed.
             </p>
           </article>
           <ul class="not-prose flex flex-wrap gap-2">
             {
-              SOCIALS.map((SOCIAL) => (
+              SOCIALS.map((SOCIAL, i) => (
                 <li class="flex gap-x-2 text-nowrap">
                   <Link
                     href={SOCIAL.HREF}
@@ -91,7 +91,7 @@ const projects: CollectionEntry<"projects">[] = (
                   >
                     {SOCIAL.NAME}
                   </Link>
-                  {"/"}
+                  {(i < SOCIALS.length - 1 || SITE.EMAIL) && "/"}
                 </li>
               ))
             }
