@@ -5,7 +5,9 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme {
-  --font-sans: Geist Sans, ui-sans-serif, system-ui, sans-serif,
+  /* Micro's text font is "sans"; it is Noto Serif JP here, the face of the
+     business card, so that English and Japanese both read as print. */
+  --font-sans: 'Noto Serif JP Variable', 'Noto Serif JP', ui-serif, serif,
     'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
   --font-mono: Geist Mono, ui-monospace, SFMono-Regular, Menlo, Monaco,
     Consolas, 'Liberation Mono', 'Courier New', monospace;

@@ -1,0 +1,29 @@
+---
+// A scratch page to judge type with English and Japanese side by side.
+// Not linked from anywhere; remove before publishing.
+import Layout from "@layouts/Layout.astro";
+import Container from "@components/Container.astro";
+---
+
+<Layout title="Specimen" description="Type specimen">
+  <Container>
+    <article>
+      <h1>About analytical engines ⚙️</h1>
+      <p>I'm an imaginary programmable computing machine powered by a steam engine.</p>
+      <h2>Running Claude Code on a remote host from agent-shell over TRAMP</h2>
+      <p>
+        agent-shell does not talk to Claude directly. It speaks ACP (Agent Client
+        Protocol), and an adapter, <code>claude-agent-acp</code>, translates between
+        ACP and Claude Code.
+      </p>
+      <h2 lang="ja">解析機関について</h2>
+      <p lang="ja">
+        解析機関（Analytical Engine）は、チャールズ・バベッジが1830年代に設計した、蒸気で動く機械式の汎用計算機です。エイダ・ラブレスはこの機械のために注釈を書き、その中の Note G はベルヌーイ数を計算する手順でした。設計だけで、実物は完成しませんでした。
+      </p>
+      <p lang="ja">
+        Emacs から TRAMP 越しに、リモートの Claude Code を使えるようにしました。<code>tramp-remote-path</code> に mise の置き場所を足し、direct async を有効にして、ssh の <code>-t -t</code> を外しています。
+      </p>
+      <pre><code>(setq agent-shell-path-resolver-function #'my/agent-shell-tramp-resolve-path)</code></pre>
+    </article>
+  </Container>
+</Layout>
