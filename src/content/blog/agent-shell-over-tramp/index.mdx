@@ -9,6 +9,7 @@ tags:
 ---
 
 import { Tweet } from "@astro-community/astro-embed-twitter";
+import Callout from "@components/Callout.astro";
 
 I wanted to use Claude Code on my VPS from the Emacs on my Mac, through
 [agent-shell](https://github.com/xenodium/agent-shell). Open a remote directory
@@ -16,6 +17,17 @@ with TRAMP, start agent-shell there, and have the agent work on the remote
 files. agent-shell already starts the agent through TRAMP when
 `default-directory` is remote, so it sounded like it should just work. It took
 a bit more than that.
+
+<Callout type="info">
+
+**TL;DR** To run Claude Code on a remote host from agent-shell over TRAMP: use
+[agent-shell-tramp](https://github.com/junyi-hou/agent-shell-tramp), and on the
+TRAMP side, enable direct async as a connection-local variable, make sure ssh
+logs in without a prompt, and drop `-t -t` from the `ssh` method.
+[The settings are at the end](#the-tramp-side-in-one-place); the rest of this
+post is how I found out.
+
+</Callout>
 
 My setup:
 
