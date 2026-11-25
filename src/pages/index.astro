@@ -104,6 +104,7 @@ const projects: CollectionEntry<"projects">[] = (
           </ul>
         </section>
 
+        {(SOCIALS.length > 0 || SITE.EMAIL) && (
         <section class="animate space-y-4">
           <h2 class="font-semibold text-black dark:text-white">
             Let's Connect
@@ -129,16 +130,19 @@ const projects: CollectionEntry<"projects">[] = (
                 </li>
               ))
             }
-            <li class="line-clamp-1">
-              <Link
-                href={`mailto:${SITE.EMAIL}`}
-                aria-label={`Email ${SITE.TITLE}`}
-              >
-                {SITE.EMAIL}
-              </Link>
-            </li>
+            {SITE.EMAIL && (
+              <li class="line-clamp-1">
+                <Link
+                  href={`mailto:${SITE.EMAIL}`}
+                  aria-label={`Email ${SITE.TITLE}`}
+                >
+                  {SITE.EMAIL}
+                </Link>
+              </li>
+            )}
           </ul>
         </section>
+        )}
       </div>
     </aside>
   </Container>
