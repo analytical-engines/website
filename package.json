@@ -10,7 +10,8 @@
     "start": "astro dev",
     "build": "astro check && astro build",
     "preview": "astro preview",
-    "astro": "astro"
+    "astro": "astro",
+    "og": "node scripts/og.mjs"
   },
   "dependencies": {
     "@astro-community/astro-embed-twitter": "^0.5.11",
@@ -32,6 +33,7 @@
     "vite": "^7"
   },
   "devDependencies": {
+    "@fontsource-variable/noto-serif-jp": "^5.3.1",
     "@tailwindcss/typography": "^0.5.18",
     "pagefind": "^1.4.0",
     "prettier": "^3.6.2",
