@@ -1,0 +1,10 @@
+// Cloudflare Workers: serve the static build in dist/.
+// The same site is also published on GitHub Pages by .github/workflows/deploy.yml.
+{
+  "name": "website",
+  "compatibility_date": "2026-11-25",
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "404-page"
+  }
+}
